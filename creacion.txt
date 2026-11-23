@@ -1,0 +1,157 @@
+CREACIÓN DE GOLDEN BOMBS
+========================
+
+Este archivo resume únicamente los prompts sustantivos recibidos (sin repetir
+mensajes genéricos como "keep implementing please") y el trabajo realizado para
+cada uno.
+
+1. PROMPT: Crear un juego completo multijugador estilo Bomberman llamado Golden Bombs
+   con salas, recolección de monedas, bombas, daño, spawns aleatorios y gráficos
+   pixel-art. También crear un archivo changes.txt que documentara todo.
+
+   QUÉ HICE:
+   - Reconstruí la estructura del repositorio desde cero (cliente, servidor,
+     scripts raíz) porque la carpeta original y el repositorio git ya no estaban.
+   - Elegí una arquitectura con servidor autoritativo Node.js + Socket.IO y
+     cliente Vite + Phaser.
+   - Implementé el motor de juego completo en `server/src/game.js` y la gestión
+     de salas en `server/src/rooms.js`.
+   - Creé el cliente en `client/src/` (main.js, ui.js, style.css, GameScene.js,
+     pixelArt.js, palette.js) con interfaz y sprites pixel-art generados
+     proceduralmente.
+   - Redacté `changes.txt` con prompts, stack, archivos, cambios de jugabilidad
+     y gráficos, instrucciones de ejecución, verificación y limitaciones.
+
+2. PROMPT: Salas multijugador con códigos de 5 caracteres; crear sala y unirse
+   por código; de 2 a 4 jugadores por sala (más tarde ampliado a 6, ver punto 11).
+
+   QUÉ HICE:
+   - Generé códigos únicos de 5 caracteres con un alfabeto sin caracteres
+     ambiguos (`server/src/rooms.js`).
+   - Añadí normalización a mayúsculas, validación de formato, y rechazo de
+     códigos inexistentes, salas llenas, salas ya iniciadas y sockets que ya
+     estaban en otra sala.
+   - Implementé la lista de jugadores en el lobby con insignias HOST/YOU y un
+     botón para copiar el código (`client/src/ui.js`).
+   - El servidor asigna colores únicos y transfiere el rol de anfitrión cuando
+     el host abandona la sala.
+
+3. PROMPT: El host puede iniciar con 1 a 4 jugadores (después 1 a 6; se permite
+   jugar solo) y debe existir una cuenta regresiva automática de 30 segundos en el lobby.
+
+   QUÉ HICE:
+   - `lobby:start` permite al host iniciar anticipadamente; el bucle del servidor
+     inicia automáticamente la partida cuando expira `lobbyEndsAt`.
+   - La interfaz muestra la cuenta regresiva, una barra de progreso y una pista
+     distinta para el host y para los invitados.
+   - Se permite una partida en solitario y el límite de la sala se amplió después
+     a 6 jugadores (punto 11).
+   - Cubrí ambos caminos con pruebas unitarias.
+
+4. PROMPT: Duración aleatoria de 30 a 60 segundos; gana quien tenga más monedas;
+   los empates comparten la victoria; spawns aleatorios en cada partida.
+
+   QUÉ HICE:
+   - `randomRoundDuration()` elige un valor entre 30.000 y 60.000 ms por ronda.
+   - Cada mapa se genera de nuevo y se valida que el área de suelo sea conexa;
+     los puntos de aparición se eligen al azar y separados entre sí (más tarde
+     se sustituyeron por las seis zonas fijas del punto 11).
+   - El cálculo de resultados ordena a los jugadores por monedas y devuelve
+     todos los `winnerIds` cuando hay empate.
+   - La pantalla de resultados muestra "SHARED VICTORY!" cuando corresponde.
+
+5. PROMPT: Monedas repartidas por el mapa que aumentan la puntuación al recogerlas.
+
+   QUÉ HICE:
+   - 12 monedas iniciales, con respawn cada 2,5 segundos hasta un máximo de 18.
+   - El servidor detecta la recolección de forma autoritativa y emite eventos
+     para partículas doradas y un texto flotante "+N" en el cliente.
+   - El HUD muestra las monedas propias y un marcador por jugador con resaltado
+     del líder.
+
+6. PROMPT: Las bombas destruyen paredes destructibles y lastiman a los jugadores;
+   las paredes de borde y los pilares fijos son indestructibles.
+
+   QUÉ HICE:
+   - Bombas con mecha de 2,2 s, alcance 2, reacciones en cadena y un máximo de
+     una bomba activa por jugador; el dueño puede salir pero no volver a entrar.
+   - Las llamas destruyen ladrillos, se detienen en piedra, duran 450 ms y
+     cambian de textura según dirección y extremo del alcance.
+   - El generador de mapas coloca siempre piedra en el borde y en las columnas
+     pares, y ladrillos de forma aleatoria en el resto.
+
+7. PROMPT: Al recibir daño se pierden 3 monedas (o todas si se tienen menos) y se
+   obtiene 1 segundo de invulnerabilidad.
+
+   QUÉ HICE:
+   - `damagePlayer()` descuenta hasta 3 monedas, las suelta en tiles cercanos
+     como nuevas monedas recuperables y fija `invulnerableUntil`.
+   - El cliente reproduce destello rojo, sacudida de cámara, partículas y
+     parpadeo del sprite mientras dura la invulnerabilidad.
+
+8. PROMPT: Gráficos pixel-art coloridos, animaciones, fuente pixelada e interfaz
+   vibrante.
+
+   QUÉ HICE:
+   - Generé todas las texturas desde matrices de píxeles en `pixelArt.js`:
+     césped, piedra, ladrillo, flores, personajes de 6 colores con 3 direcciones
+     y 2 frames de caminata, monedas giratorias, bombas con chispa, llamas
+     animadas en 4 direcciones, flecha "YOU", chispas y escombros.
+   - Añadí interpolación de movimiento, animaciones de entidades, partículas,
+     texto flotante, confeti, toasts y efectos de pantalla.
+   - Integré la fuente Silkscreen (regular y bold, licencia OFL incluida) en
+     toda la interfaz y en las etiquetas de Phaser.
+   - Diseñé una UI responsive con tema neón pixelado, controles táctiles en
+     dispositivos de puntero grueso y pantallas de menú, lobby, partida y
+     resultados.
+
+9. PROMPT: Instrucciones de ejecución, verificación y documentación en changes.txt.
+
+   QUÉ HICE:
+   - Escribí `README.md` y `changes.txt` con instalación, ejecución en
+     desarrollo y producción, controles, reglas, estructura, pruebas y
+     limitaciones.
+   - Añadí `npm test` (21 pruebas, todas pasan) y `npm run build` (correcto).
+   - Verifiqué en Chrome headless el flujo completo de dos jugadores: sala,
+     inicio, renderizado, movimiento, bomba, llamas, daño, resultados, vuelta
+     automática al lobby, transferencia de host, partida en solitario y control
+     de capacidad, sin errores de página ni de consola.
+   - Comprobé que el servidor de producción sirve el cliente compilado y que
+     `/health` responde correctamente.
+
+10. PROMPT: Mostrar los controles en el menú o al comenzar la partida, y añadir
+    ese cambio a creacion.txt.
+
+    QUÉ HICE:
+    - Añadí un bloque "CONTROLS" visible en el menú principal (`client/index.html`)
+      con las teclas WASD / ARROWS para moverse y SPACE / E para colocar bombas,
+      con estilo pixelado en `client/src/style.css`.
+    - En pantallas táctiles ese bloque muestra en su lugar el aviso de usar el
+      D-pad y el botón BOMB que aparecen durante la partida.
+    - El banner de inicio de ronda ("COIN RUSH") también incluye una línea con
+      los controles durante unos segundos al empezar el match.
+    - Documenté el cambio en este archivo y en `changes.txt`, y volví a ejecutar
+      `npm run build` para verificarlo.
+
+11. PROMPT: Subir el límite del lobby a 6 jugadores; colocar 4 en las esquinas y
+    2 en el centro de la fila superior e inferior del mapa; crear una comprobación
+    para no aparecer dentro de un bloque ni entre bloques que no se puedan romper.
+
+    QUÉ HICE:
+    - Cambié `MAX_PLAYERS` a 6 en `server/src/constants.js`. La sala admite ahora
+      hasta 6 jugadores, el contador del lobby muestra "x / 6" y se añadieron los
+      colores púrpura y rojo para que los 6 participantes se distingan.
+    - Definí `SPAWN_TILES` con las seis posiciones fijas: (1,1), (13,1), (1,9),
+      (13,9) para las esquinas interiores y (7,1), (7,9) para el centro superior
+      e inferior. Cada ronda baraja qué jugador ocupa cada posición.
+    - Añadí `isSafeSpawnTile()` y `validateSpawnTiles()` en `server/src/game.js`:
+      una posición es válida solo si es suelo libre y tiene al menos dos salidas
+      que no sean piedra indestructible (los ladrillos sí cuentan porque se pueden
+      destruir). El constructor de `Game` vuelve a validar los spawns asignados.
+    - `generateMap()` despeja las zonas de spawn, sus salidas y tres corredores
+      (filas 1 y 9, columna central) para garantizar que las seis zonas pertenezcan
+      a una única área conectada; cualquier mapa que falle la validación se descarta.
+    - Añadí pruebas para los seis spawns, la validación de bloques/bolsillos y el
+      rechazo del séptimo jugador. `npm test` pasa 21/21 y una comprobación con
+      6 sockets reales confirmó los seis spawn tiles, únicos y sobre suelo libre.
+    - Actualicé `README.md`, `changes.txt` y `creacion.txt` con estos cambios.

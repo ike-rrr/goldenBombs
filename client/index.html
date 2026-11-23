@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1027" />
+    <meta
+      name="description"
+      content="Golden Bombs: a colorful multiplayer coin rush with bombs, room codes, and pixel-art chaos."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Golden Bombs — Multiplayer Coin Rush</title>
+  </head>
+  <body>
+    <div id="app">
+      <div class="bg-grid" aria-hidden="true"></div>
+      <div class="bg-glow bg-glow-a" aria-hidden="true"></div>
+      <div class="bg-glow bg-glow-b" aria-hidden="true"></div>
+      <div class="bg-floaters" aria-hidden="true">
+        <span class="floater f1">✦</span>
+        <span class="floater f2">◆</span>
+        <span class="floater f3">✦</span>
+        <span class="floater f4">◆</span>
+        <span class="floater f5">✦</span>
+      </div>
+
+      <div id="connection-status" class="connection-status">CONNECTING…</div>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+      <main class="stage">
+        <section id="screen-menu" class="screen menu-screen">
+          <div class="logo-wrap">
+            <div class="logo-line">
+              <svg class="logo-bomb" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges">
+                <rect x="5" y="4" width="8" height="10" fill="#343a72" />
+                <rect x="4" y="6" width="10" height="6" fill="#343a72" />
+                <rect x="6" y="5" width="4" height="2" fill="#5f68b8" />
+                <rect x="6" y="7" width="2" height="3" fill="#5f68b8" />
+                <rect x="10" y="1" width="2" height="2" fill="#ffb703" />
+                <rect x="12" y="2" width="2" height="2" fill="#fff3b0" />
+                <rect x="9" y="3" width="2" height="2" fill="#8a4b00" />
+              </svg>
+              <span class="logo-golden">GOLDEN</span>
+            </div>
+            <div class="logo-bombs">BOMBS</div>
+            <p class="tagline">GRAB COINS · BLAST RIVALS · DON'T GET BROKE</p>
+          </div>
+
+          <div class="panel menu-panel">
+            <label class="field-label" for="player-name">YOUR NAME</label>
+            <input
+              id="player-name"
+              class="text-input"
+              type="text"
+              maxlength="14"
+              autocomplete="nickname"
+              placeholder="PLAYER"
+            />
+
+            <button id="btn-create" class="btn btn-gold btn-wide" type="button">
+              CREATE ROOM
+            </button>
+
+            <div class="divider"><span>OR JOIN WITH A CODE</span></div>
+
+            <div class="join-row">
+              <input
+                id="room-code"
+                class="text-input code-input"
+                type="text"
+                maxlength="5"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                placeholder="CODE"
+                aria-label="Room code"
+              />
+              <button id="btn-join" class="btn btn-cyan" type="button">JOIN</button>
+            </div>
+
+            <p id="menu-error" class="error-line" role="alert"></p>
+          </div>
+
+          <div class="rules-strip">
+            <div class="rule">
+              <span class="rule-icon rule-coin" aria-hidden="true"></span>
+              <strong>COLLECT</strong>
+              <span>Coins make you win.</span>
+            </div>
+            <div class="rule">
+              <span class="rule-icon rule-bomb" aria-hidden="true"></span>
+              <strong>BLAST</strong>
+              <span>Break bricks &amp; rivals.</span>
+            </div>
+            <div class="rule">
+              <span class="rule-icon rule-heart" aria-hidden="true"></span>
+              <strong>SURVIVE</strong>
+              <span>Hits cost 3 coins.</span>
+            </div>
+          </div>
+
+          <div class="controls-guide" aria-label="Game controls">
+            <span class="controls-guide-title">CONTROLS</span>
+            <div class="controls-guide-keys">
+              <span class="controls-guide-item"><kbd>WASD</kbd> / <kbd>ARROWS</kbd> MOVE</span>
+              <span class="controls-guide-item"><kbd>SPACE</kbd> / <kbd>E</kbd> BOMB</span>
+            </div>
+            <span class="controls-guide-touch">TOUCH: USE THE ON-SCREEN D-PAD AND BOMB BUTTON</span>
+          </div>
+        </section>
+
+        <section id="screen-lobby" class="screen hidden">
+          <div class="panel lobby-panel">
+            <div class="panel-heading">
+              <span>ROOM CODE</span>
+              <button id="btn-copy" class="btn btn-mini btn-ghost" type="button">
+                <span id="copy-label">COPY</span>
+              </button>
+            </div>
+
+            <div id="room-code-display" class="room-code">-----</div>
+
+            <div class="countdown-row">
+              <span>MATCH STARTS IN</span>
+              <strong><span id="lobby-seconds">30</span>s</strong>
+            </div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="lobby-progress" class="progress-fill"></div>
+            </div>
+
+            <div class="players-heading">
+              <span>PLAYERS</span>
+              <span id="player-count">1 / 6</span>
+            </div>
+            <ul id="lobby-players" class="lobby-players"></ul>
+
+            <p id="lobby-hint" class="lobby-hint">Start early or wait for the countdown.</p>
+
+            <button id="btn-start" class="btn btn-gold btn-wide" type="button">
+              START MATCH
+            </button>
+            <button id="btn-leave" class="btn btn-ghost btn-wide" type="button">
+              LEAVE ROOM
+            </button>
+          </div>
+        </section>
+
+        <section id="screen-game" class="screen hidden">
+          <div class="game-shell">
+            <div class="hud">
+              <div class="hud-block hud-coins">
+                <span class="hud-coin-icon" aria-hidden="true"></span>
+                <div>
+                  <span class="hud-label">MY COINS</span>
+                  <strong id="my-coins">0</strong>
+                </div>
+              </div>
+
+              <div id="round-timer" class="round-timer">0:60</div>
+
+              <div id="scoreboard" class="scoreboard" aria-label="Scores"></div>
+            </div>
+
+            <div id="canvas-wrap">
+              <div id="game-canvas"></div>
+              <div id="round-banner" class="round-banner hidden">
+                <span id="round-banner-title">COIN RUSH</span>
+                <small id="round-banner-sub">45 SECONDS</small>
+                <span class="round-banner-controls">WASD / ARROWS MOVE &middot; SPACE / E BOMB</span>
+              </div>
+              <div id="damage-flash" aria-hidden="true"></div>
+            </div>
+
+            <div class="controls-hint">
+              <span><kbd>WASD</kbd> / <kbd>ARROWS</kbd> MOVE</span>
+              <span><kbd>SPACE</kbd> / <kbd>E</kbd> BOMB</span>
+            </div>
+
+            <div id="touch-controls" class="touch-controls" aria-label="Touch controls">
+              <div class="touch-dpad">
+                <button class="touch-btn touch-up" data-dir="up" type="button">▲</button>
+                <button class="touch-btn touch-left" data-dir="left" type="button">◀</button>
+                <button class="touch-btn touch-down" data-dir="down" type="button">▼</button>
+                <button class="touch-btn touch-right" data-dir="right" type="button">▶</button>
+              </div>
+              <button id="touch-bomb" class="touch-btn touch-bomb" type="button">BOMB</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="screen-results" class="screen hidden">
+          <div class="panel results-panel">
+            <div id="confetti" class="confetti" aria-hidden="true"></div>
+            <svg class="results-crown" viewBox="0 0 16 16" aria-hidden="true" shape-rendering="crispEdges">
+              <rect x="1" y="4" width="2" height="7" fill="#ffd447" />
+              <rect x="4" y="2" width="2" height="9" fill="#ffd447" />
+              <rect x="7" y="0" width="2" height="11" fill="#ffd447" />
+              <rect x="10" y="2" width="2" height="9" fill="#ffd447" />
+              <rect x="13" y="4" width="2" height="7" fill="#ffd447" />
+              <rect x="1" y="11" width="14" height="3" fill="#ff9f1c" />
+              <rect x="6" y="5" width="2" height="2" fill="#fff3b0" />
+              <rect x="9" y="8" width="2" height="2" fill="#fff3b0" />
+            </svg>
+            <p class="eyebrow">ROUND OVER</p>
+            <h2 id="results-title">COIN CHAMPION!</h2>
+            <p id="results-winner" class="results-winner"></p>
+            <ol id="results-list" class="results-list"></ol>
+            <p id="results-return" class="results-return">Returning to lobby…</p>
+            <button id="btn-results-leave" class="btn btn-ghost btn-wide" type="button">
+              LEAVE ROOM
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <noscript>This game needs JavaScript enabled.</noscript>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

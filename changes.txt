@@ -1,0 +1,172 @@
+GOLDEN BOMBS - CHANGE LOG
+=========================
+
+1. RECEIVED PROMPTS / REQUESTS
+------------------------------
+- Build a complete multiplayer Bomberman-style game called Golden Bombs.
+- Rooms with five-character codes: create a room, share the code, join by code.
+- Up to six players per room; host may start early with 1-6 players (solo allowed);
+  a 30-second lobby countdown auto-starts the match.
+- Random match duration between 30 and 60 seconds; highest coin count wins;
+  tied players share the victory.
+- Six fixed spawn zones (four corners plus the middle of the top and bottom edges)
+  shuffled among players each round, with a check that no spawn is inside a block
+  or trapped by indestructible walls.
+- Coins scattered over the map; walking over them increases the score.
+- Bombs destroy destructible walls and hurt players.
+- Taking damage drops three coins (or all remaining coins if fewer) and grants
+  one second of invulnerability.
+- Border walls and fixed pillar walls are indestructible.
+- Colorful pixel-art graphics, animations, pixel font, vibrant UI.
+- Create changes.txt documenting prompts, stack, files, gameplay/graphics changes,
+  run instructions, verification, and limitations.
+- Later request: raise the lobby limit to 6, place players in the four corners and
+  the top/bottom middle positions, and validate that spawns are not inside blocks
+  or squeezed between unbreakable walls.
+- Final instruction: "implement everything" / "keep implementing until it's done".
+
+2. FRAMEWORK / STACK
+--------------------
+- Node.js + Express + Socket.IO authoritative game server (ES modules).
+- Vite + Phaser 4 client (ES modules).
+- 15x11 tile board rendered at 48px per tile from 16x16 procedural textures.
+- Silkscreen pixel font bundled locally (regular + bold, OFL license).
+- Server sends 20 Hz state snapshots; client interpolates positions and plays
+  event-driven cosmetic effects.
+- No external sprite/image assets: all art is generated from pixel matrices.
+
+3. FILES CREATED
+----------------
+Root:
+- package.json          root scripts (dev, build, start, test, postinstall)
+- README.md             setup, controls, rules, architecture, testing
+- changes.txt           this document
+- .gitignore            ignores dependencies, build output, logs
+
+Client:
+- client/index.html     menu, lobby, game HUD, results markup
+- client/src/main.js    socket connection, ACK helpers, lifecycle orchestration
+- client/src/ui.js      screen transitions, lobby list, HUD, results, confetti,
+                        touch controls, toasts, room-code copy
+- client/src/style.css  full pixel-art theme, animations, responsive layout
+- client/src/game/GameScene.js   Phaser board rendering, player/bomb/coin/flame
+                                 sprites, interpolation, particles, screen shake,
+                                 keyboard input, damage flash hooks
+- client/src/game/pixelArt.js    procedural textures for grass, stone, brick,
+                                 flowers, pebbles, shadows, players (4 colors x
+                                 3 directions x 2 walk frames), coins, bombs,
+                                 flames (center/arm/end x 4 directions x 3 frames),
+                                 arrows, sparks, debris
+- client/src/game/palette.js     player color palettes
+- client/src/assets/fonts/*      Silkscreen woff2 + OFL license
+- client/public/favicon.svg      pixel bomb/coin favicon
+- client/vite.config.js          dev proxy for /socket.io
+
+Server:
+- server/src/index.js   HTTP/Socket.IO bootstrap, CORS, rate limits, health route,
+                        production static serving, 50 ms game loop
+- server/src/rooms.js   room codes, joins/leaves, host transfer, lobby countdown,
+                        early start, results timing, broadcasts
+- server/src/game.js    map generation, connected-floor validation, spawns, coins,
+                        movement cooldowns, bombs, chain reactions, flames,
+                        wall destruction, damage, invulnerability, results
+- server/src/constants.js        all gameplay tuning constants
+- server/test/game.test.js       14 engine tests
+- server/test/rooms.test.js      7 room lifecycle tests
+
+4. GAMEPLAY CHANGES / IMPLEMENTED FEATURES
+------------------------------------------
+- Room codes: five characters from an unambiguous alphabet, unique per active room;
+  codes are normalized to uppercase, invalid/unknown/full/in-progress joins are rejected.
+- Lobby: live 30-second countdown and progress bar, player list with HOST/YOU badges,
+  copy-code button, host-only start button, leave button.
+- Match start: server-generated map and spawn points sent to every client; round banner
+  shows the random duration.
+- Rooms accept up to six players; purple and red were added as the fifth and sixth
+  player colors so every member is visually distinct.
+- Spawns use six fixed tiles: four inner corners and the middle of the top and bottom
+  edges, shuffled each round. generateMap() opens connecting lanes and
+  validateSpawnTiles() rejects tiles that are blocked or have fewer than two exits
+  that are not indestructible stone; Game rechecks the assigned spawns before play.
+- Board: border and evenly spaced pillars are stone (indestructible); interior floor
+  tiles can contain breakable brick walls.
+- Coins: 12 initial coins, respawn every 2.5 seconds up to 18; pickups award one coin
+  each and emit a floating "+N" indicator for the local player.
+- Movement: tile-based, server-validated, 130 ms cooldown, four directions, held-key
+  repeat, touch D-pad; client interpolates between snapshots.
+- Bombs: one active bomb per player, 2.2 s fuse, blast range 2, 450 ms flames,
+  chain reactions; owners can step off their bomb but cannot walk back onto it.
+- Damage: three coins dropped (or fewer if the player has less), one second of
+  invulnerability with blinking sprite, red screen flash, camera shake, particles.
+- Disconnects: drop the player's coins, remove their bombs, transfer host to the next
+  member, delete empty rooms.
+- Results: sorted ranking, winner(s) with shared-victory handling, confetti, eight-second
+  countdown, automatic return to a fresh lobby.
+- Input: WASD/arrows to move, Space/E to place bombs; keyboard and pointer handlers
+  ignore text inputs and modifier keys.
+
+5. GRAPHICS / UI CHANGES
+------------------------
+- Procedural pixel-art textures: animated grass variants, bricks, stone, flowers,
+  pebbles, six colored player characters with idle/walk/direction frames, spinning
+  coins, ticking bombs, four-direction animated flame sprites, sparks, debris.
+- Effects: coin pickup sparkles, explosion and hit bursts, floating score text,
+  wall-break debris, camera shake, invulnerability blink.
+- Vibrant neon pixel UI: title with drop shadows and bobbing animation, paneled menu
+  and lobby, scoreboard chips with leader highlight, urgent timer pulse, result
+  confetti, toasts, responsive layout, coarse-pointer touch controls.
+- Bundled Silkscreen pixel font used throughout the DOM and Phaser labels.
+- A visible "CONTROLS" guide was added to the main menu (WASD / ARROWS to move,
+  SPACE / E to bomb), with a touch-specific hint on coarse-pointer devices, and
+  the round-start banner now also shows the controls while it is on screen.
+
+6. RUN INSTRUCTIONS
+-------------------
+Development:
+    npm install
+    npm run dev
+    # open http://localhost:5173
+
+Production:
+    npm install
+    npm run build
+    npm start
+    # open http://localhost:3001
+
+Optional server environment variables: PORT (default 3001), CLIENT_ORIGIN
+(comma-separated allowed origins or "*").
+
+Tests:
+    npm test
+    npm run build
+
+7. VERIFICATION
+---------------
+- npm test: 21/21 tests passing (map generation and connectivity, fixed spawns and
+  spawn validation, round duration bounds, damage/invulnerability, coin drops, bombs/walls/chains,
+  bomb re-entry, coin pickup, tie ranking, disconnect cleanup, room codes, join
+  validation and capacity, host-only start, start payload, 30 s auto-start,
+  results-to-lobby flow, host transfer, input gating outside matches).
+- npm run build: succeeds; Vite emits the bundled client into client/dist.
+- Headless Chrome end-to-end run verified: room creation and joining, two-player
+  lobby, early start, canvas and board rendering, keyboard movement, bomb placement,
+  flame rendering, coin HUD, damage flash, late-join rejection, results with shared
+  victory and confetti, automatic lobby return with fresh countdown, host transfer
+  after leave, solo start, and room-capacity rejection.
+- A six-socket server check confirmed six players can join and start, a seventh
+  is rejected with ROOM_FULL, and all six fixed spawn tiles are used, unique, on
+  open floor, and identical for every client.
+  No page errors or console errors were recorded.
+- Server health endpoint returns {"ok":true,"service":"golden-bombs",...}.
+
+8. LIMITATIONS / KNOWN NOTES
+-----------------------------
+- Rooms and matches live only in server memory; a server restart clears them.
+- No persistent accounts, matchmaking, spectator mode, or reconnect-to-room support;
+  losing the connection returns the player to the menu.
+- Vite prints a large-chunk warning for the bundled Phaser engine; this does not
+  affect functionality.
+- The client uses WebGL/Canvas via Phaser; very old browsers without modern canvas
+  support are not supported.
+- The bundled Silkscreen font is licensed under the SIL Open Font License (see
+  client/src/assets/fonts/OFL.txt).
