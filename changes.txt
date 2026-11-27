@@ -15,7 +15,10 @@ GOLDEN BOMBS - CHANGE LOG
 - Coins scattered over the map; walking over them increases the score.
 - Bombs destroy destructible walls and hurt players.
 - Taking damage drops three coins (or all remaining coins if fewer) and grants
-  one second of invulnerability.
+  two seconds of invulnerability; coins cannot be collected and bombs cannot be
+  placed during that window.
+- Later request: make the invulnerability window longer after a bomb hit, but
+  block coin pickups and bomb placement while it is active.
 - Border walls and fixed pillar walls are indestructible.
 - Colorful pixel-art graphics, animations, pixel font, vibrant UI.
 - Create changes.txt documenting prompts, stack, files, gameplay/graphics changes,
@@ -121,8 +124,11 @@ Server:
   pickups reduce the move cooldown by 20 ms per level down to 70 ms. They start on the
   map (3/5), respawn every 10 seconds, and cap at 4/6 depending on map size. Buffs are
   persistent for the round and are included in every state snapshot.
-- Damage: three coins dropped (or fewer if the player has less), one second of
+- Damage: three coins dropped (or fewer if the player has less), two seconds of
   invulnerability with blinking sprite, red screen flash, camera shake, particles.
+  Movement remains allowed, but `pickupCoins()` and `placeBomb()` reject actions
+  while `now < invulnerableUntil`; the client shows a toast when bomb input is
+  blocked for this reason.
 - Disconnects: drop the player's coins, remove their bombs, transfer host to the next
   member, delete empty rooms.
 - Results: sorted ranking, winner(s) with shared-victory handling, confetti, eight-second
@@ -173,7 +179,7 @@ Tests:
 
 7. VERIFICATION
 ---------------
-- npm test: 34/34 tests passing (small/large map generation, connectivity, corner
+- npm test: 35/35 tests passing (small/large map generation, connectivity, corner
   and middle spawns, spawn validation, round duration bounds, range/speed power-ups
   and respawn caps, buff fields in snapshots, gem value/spawn rate/caps and state
   fields, damage/invulnerability, coin drops,
@@ -196,6 +202,9 @@ Tests:
 - A manager-level smoke check confirmed a started room exposes a gem, collecting it
   awards exactly five coins, and the broadcast `coin-pickup` event carries
   `special: 1` / `amount: 5`.
+- Invulnerability tests confirm the two-second window, that movement still works,
+  and that coin pickups and bomb placement are rejected during it but accepted
+  as soon as it expires.
 - Server health endpoint returns {"ok":true,"service":"golden-bombs",...}.
 
 8. LIMITATIONS / KNOWN NOTES
@@ -299,7 +308,8 @@ cada uno.
 
    QUÉ HICE:
    - `damagePlayer()` descuenta hasta 3 monedas, las suelta en tiles cercanos
-     como nuevas monedas recuperables y fija `invulnerableUntil`.
+     como nuevas monedas recuperables y fija `invulnerableUntil` (actualmente
+      2 segundos; mientras dura no se pueden recoger monedas ni colocar bombas).
    - El cliente reproduce destello rojo, sacudida de cámara, partículas y
      parpadeo del sprite mientras dura la invulnerabilidad.
 
@@ -436,3 +446,24 @@ cada uno.
       incluye `special: 1` y `amount: 5`.
     - Actualicé `README.md` y `changes.txt` con las reglas, los efectos y la
       verificación de las gemas.
+
+14. PROMPT: "podrías hacer que al recibir daño de bomba el intervalo de
+    invencibilidad sea más largo pero que no puedas no agarrar monedas ni
+    colocar bombas" (ampliar la invulnerabilidad y bloquear monedas/bombas
+    mientras esté activa).
+
+    QUÉ HICE:
+    - Subí `INVULNERABILITY_MS` de 1.000 a 2.000 ms en
+      `server/src/constants.js`.
+    - `pickupCoins()` recibe el `now` de `move()` y devuelve 0 sin tocar monedas
+      cuando `now < invulnerableUntil`. `placeBomb()` aplica la misma comprobación
+      antes de crear la bomba. El movimiento y los power-ups siguen funcionando;
+      las monedas soltadas por el golpe se pueden recoger al terminar el plazo.
+    - `GameScene.js` guarda `localInvulnerable` desde el snapshot y muestra un
+      toast ("Still recovering — no bombs while invulnerable") si se intenta
+      colocar una bomba durante la invulnerabilidad.
+    - Actualicé la prueba de invulnerabilidad para usar la constante y añadí una
+      prueba que verifica que durante el plazo se puede caminar pero no recoger
+      monedas ni bombear, y que ambas acciones se permiten justo al expirar.
+      `npm test` pasa 35/35 y `npm run build` compila correctamente.
+    - Actualicé `README.md` y `changes.txt` con la nueva regla y su verificación.

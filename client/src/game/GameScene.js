@@ -52,6 +52,7 @@ export class GameScene extends Phaser.Scene {
     this.mapWidth = 15;
     this.mapHeight = 11;
     this.activeRound = false;
+    this.localInvulnerable = false;
     this.held = new Map();
     this.lastSentAt = 0;
     this.sendCooldownMs = MOVE_SEND_MS;
@@ -116,6 +117,10 @@ export class GameScene extends Phaser.Scene {
 
   triggerBomb() {
     if (!this.activeRound) return;
+    if (this.localInvulnerable) {
+      this.onToast?.('Still recovering — no bombs while invulnerable');
+      return;
+    }
     this.onBomb?.();
   }
 
@@ -160,6 +165,7 @@ export class GameScene extends Phaser.Scene {
 
   stopGame() {
     this.activeRound = false;
+    this.localInvulnerable = false;
     this.held.clear();
     this.tweens.killAll();
     this.resetBoard();
@@ -315,8 +321,11 @@ export class GameScene extends Phaser.Scene {
       player.rangeAura.setVisible(player.rangeLevel > 0);
       player.speedAura.setVisible(player.speedLevel > 0);
 
-      if (state.id === this.localPlayerId && state.moveCooldownMs) {
-        this.sendCooldownMs = Math.max(50, Math.min(MOVE_SEND_MS, state.moveCooldownMs - 10));
+      if (state.id === this.localPlayerId) {
+        this.localInvulnerable = state.invulnerable;
+        if (state.moveCooldownMs) {
+          this.sendCooldownMs = Math.max(50, Math.min(MOVE_SEND_MS, state.moveCooldownMs - 10));
+        }
       }
 
       if (player.name !== state.name) {

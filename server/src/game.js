@@ -505,12 +505,14 @@ export class Game {
     player.dir = directionName;
     player.lastMoveAt = now;
 
-    this.pickupCoins(player);
+    this.pickupCoins(player, now);
     this.pickupPowerups(player);
     return true;
   }
 
-  pickupCoins(player) {
+  pickupCoins(player, now = Date.now()) {
+    if (now < player.invulnerableUntil) return 0;
+
     const picked = this.coins.filter((coin) => coin.x === player.x && coin.y === player.y);
     if (picked.length === 0) return 0;
 
@@ -573,6 +575,7 @@ export class Game {
 
     const player = this.players.get(playerId);
     if (!player) return false;
+    if (now < player.invulnerableUntil) return false;
     if (player.bombsActive >= MAX_ACTIVE_BOMBS) return false;
     if (this.bombAt(player.x, player.y)) return false;
 

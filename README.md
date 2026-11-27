@@ -43,7 +43,7 @@ Optional environment variables for the server:
 5. Bombs detonate after 2.2 seconds. The base blast range is two tiles; red range pickups increase it up to five. Bombs destroy brick walls, chain-react with other bombs, and stop at stone borders and pillars.
 6. Cyan speed pickups reduce the movement cooldown from 130 ms toward 70 ms over three levels. Active range and speed levels are shown by player auras, scoreboard badges, and the local HUD.
 7. Pickups appear at the start of a round and respawn every 10 seconds, up to four on the small map and six on the large map.
-8. A hit costs up to three coins and grants one second of invulnerability. Dropped coins can be collected by anyone.
+8. A hit costs up to three coins and grants two seconds of invulnerability. While invulnerable you can still move, but you cannot collect coins or place bombs; dropped coins become collectable when the window ends (anyone may grab them).
 9. The highest coin count wins. Tied players share victory. Results are shown for eight seconds before everyone returns to a new lobby.
 
 ## Project structure
@@ -71,7 +71,7 @@ The server owns all gameplay state (movement, bombs, flames, pickups, damage, ti
 ## Testing
 
 ```bash
-npm test        # 34 server engine/room tests
+npm test        # 35 server engine/room tests
 npm run build   # production client build
 ```
 

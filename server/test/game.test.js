@@ -5,6 +5,7 @@ import {
   BLAST_RANGE_MAX,
   COIN_KINDS,
   COIN_RESPAWN_MS,
+  INVULNERABILITY_MS,
   LARGE_SPAWN_TILES,
   MAP_SIZES,
   MAX_PLAYERS,
@@ -390,7 +391,7 @@ test('state exposes power-ups and buff indicators for the HUD', () => {
   assert.equal(me.moveCooldownMs, MOVE_COOLDOWN_MS - SPEED_COOLDOWN_STEP_MS);
 });
 
-test('players drop three coins and cannot be hit again for one second', () => {
+test('players drop three coins and stay invulnerable for the full window', () => {
   const { game } = makeGame();
   const player = game.players.get('a');
   player.coins = 5;
@@ -398,15 +399,58 @@ test('players drop three coins and cannot be hit again for one second', () => {
 
   assert.equal(game.damagePlayer('a', 1_000), true);
   assert.equal(player.coins, 2);
-  assert.equal(player.invulnerableUntil, 2_000);
+  assert.equal(player.invulnerableUntil, 1_000 + INVULNERABILITY_MS);
   assert.equal(game.coins.length, 3);
 
-  assert.equal(game.damagePlayer('a', 1_500), false);
+  assert.equal(game.damagePlayer('a', 1_000 + INVULNERABILITY_MS - 1), false);
   assert.equal(player.coins, 2);
 
-  assert.equal(game.damagePlayer('a', 2_000), true);
+  assert.equal(game.damagePlayer('a', 1_000 + INVULNERABILITY_MS), true);
   assert.equal(player.coins, 0);
   assert.equal(game.coins.length, 5);
+});
+
+test('invulnerable players can move but cannot collect coins or place bombs', () => {
+  const { game } = makeGame();
+  const player = game.players.get('a');
+  player.x = 3;
+  player.y = 3;
+  player.coins = 2;
+  player.invulnerableUntil = 0;
+
+  assert.equal(game.damagePlayer('a', 1_000), true);
+  assert.equal(player.coins, 0);
+  assert.equal(game.coins.length, 2);
+  game.coins = [];
+
+  game.coins.push({
+    id: 900,
+    kind: COIN_KINDS.NORMAL,
+    value: 1,
+    x: 4,
+    y: 3,
+    droppedBy: null,
+  });
+  player.lastMoveAt = Number.NEGATIVE_INFINITY;
+  assert.equal(game.move('a', 'right', 1_100), true);
+  assert.equal(player.x, 4);
+  assert.equal(player.coins, 0);
+  assert.equal(game.coins.some((coin) => coin.id === 900), true);
+  assert.equal(game.placeBomb('a', 1_100), false);
+  assert.equal(game.bombs.length, 0);
+
+  const recoveredAt = 1_000 + INVULNERABILITY_MS;
+  assert.equal(game.placeBomb('a', recoveredAt), true);
+  assert.equal(game.bombs.length, 1);
+
+  game.bombs = [];
+  player.bombsActive = 0;
+  player.x = 3;
+  player.y = 3;
+  player.lastMoveAt = Number.NEGATIVE_INFINITY;
+  assert.equal(game.move('a', 'right', recoveredAt + 1), true);
+  assert.equal(player.coins, 1);
+  assert.equal(game.coins.some((coin) => coin.id === 900), false);
 });
 
 test('a hit drops only the coins the player owns', () => {

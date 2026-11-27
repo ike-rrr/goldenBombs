@@ -29,7 +29,8 @@ export const BLAST_RANGE_MAX = 5;
 export const MAX_ACTIVE_BOMBS = 1;
 export const MOVE_COOLDOWN_MS = 130;
 export const MOVE_COOLDOWN_MIN_MS = 70;
-export const INVULNERABILITY_MS = 1_000;
+// After a bomb hit the player is safe for longer, but cannot score or bomb.
+export const INVULNERABILITY_MS = 2_000;
 
 export const COINS_START = 12;
 export const COINS_MAX = 18;
