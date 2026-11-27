@@ -255,6 +255,61 @@ function paintCoin(context, frame) {
   }
 }
 
+// Special gems use a cyan/violet faceted diamond so they stand out from coins.
+function paintGem(context, frame) {
+  const outline = '#2b1a55';
+  const deep = '#45217f';
+  const mid = '#6b3fd6';
+  const light = '#a68bff';
+  const cyan = '#7ee6ff';
+  const shine = '#d9f7ff';
+
+  for (let y = 0; y < 16; y += 1) {
+    for (let x = 0; x < 16; x += 1) {
+      const dx = Math.abs(x - 7.5);
+      const dy = Math.abs(y - 7.5);
+      const radius = dx + dy;
+      if (radius > 7.2) continue;
+
+      let color = outline;
+      if (radius < 6.2) {
+        if (radius < 2.8) color = cyan;
+        else if (x < 7) color = y < 8 ? mid : deep;
+        else color = y < 8 ? light : mid;
+        if (x === 7 || y === 7) color = radius < 4.2 ? shine : color;
+      }
+      fillPixels(context, x, y, 1, 1, color);
+    }
+  }
+
+  const sparkles = [
+    [
+      [5, 4],
+      [11, 9],
+    ],
+    [
+      [6, 3],
+      [10, 10],
+      [12, 8],
+    ],
+    [
+      [7, 4],
+      [11, 7],
+    ],
+    [
+      [5, 5],
+      [9, 11],
+      [12, 7],
+    ],
+  ][frame % 4];
+
+  for (const [x, y] of sparkles) {
+    if (Math.abs(x - 7.5) + Math.abs(y - 7.5) < 6.2) {
+      fillPixels(context, x, y, 1, 1, '#ffffff');
+    }
+  }
+}
+
 function paintBomb(context, frame) {
   paintMatrix(context, BOMB, {
     O: '#11152d',
@@ -375,6 +430,59 @@ function paintDebris(context, color, highlight) {
   fillPixels(context, 0, 1, 2, 1, highlight);
 }
 
+// Range pickups are deliberately bright red so their effect can be recognized
+// instantly; speed pickups use an cyan lightning bolt for contrast.
+function paintRangePowerup(context) {
+  fillPixels(context, 3, 1, 10, 2, '#8b0f27');
+  fillPixels(context, 2, 3, 12, 10, '#8b0f27');
+  fillPixels(context, 3, 13, 10, 2, '#8b0f27');
+  fillPixels(context, 3, 2, 10, 11, '#e5233f');
+  fillPixels(context, 4, 3, 8, 2, '#ff7b7b');
+  fillPixels(context, 3, 4, 2, 7, '#ff4f5f');
+  fillPixels(context, 11, 4, 2, 8, '#a8112f');
+  fillPixels(context, 4, 12, 8, 1, '#a8112f');
+  fillPixels(context, 7, 4, 2, 8, '#fff8df');
+  fillPixels(context, 5, 7, 6, 2, '#fff8df');
+  fillPixels(context, 7, 5, 2, 1, '#ffd447');
+}
+
+function paintSpeedPowerup(context) {
+  fillPixels(context, 4, 1, 8, 2, '#0b6e93');
+  fillPixels(context, 3, 3, 10, 10, '#0b6e93');
+  fillPixels(context, 4, 13, 8, 2, '#0b6e93');
+  fillPixels(context, 4, 2, 8, 11, '#28c7ef');
+  fillPixels(context, 5, 3, 6, 2, '#b9f4ff');
+  fillPixels(context, 3, 4, 2, 7, '#7ee6ff');
+  fillPixels(context, 11, 4, 2, 8, '#0b6e93');
+  fillPixels(context, 4, 12, 8, 1, '#0b6e93');
+  fillPixels(context, 9, 3, 3, 4, '#fff8df');
+  fillPixels(context, 6, 6, 4, 4, '#fff8df');
+  fillPixels(context, 4, 9, 4, 4, '#fff8df');
+  fillPixels(context, 3, 12, 3, 2, '#ffd447');
+}
+
+function paintRangeAura(context) {
+  for (let index = 0; index < 16; index += 1) {
+    const edge = index < 2 || index > 13;
+    if (edge) {
+      fillPixels(context, index, 0, 1, 1, '#ff4f5f');
+      fillPixels(context, index, 15, 1, 1, '#ff4f5f');
+    }
+    if (index % 2 === 0) {
+      fillPixels(context, 0, index, 1, 1, '#e5233f');
+      fillPixels(context, 15, index, 1, 1, '#e5233f');
+    }
+  }
+}
+
+function paintSpeedAura(context) {
+  fillPixels(context, 1, 4, 2, 3, '#7ee6ff');
+  fillPixels(context, 4, 6, 2, 4, '#28c7ef');
+  fillPixels(context, 7, 5, 2, 6, '#b9f4ff');
+  fillPixels(context, 10, 6, 2, 4, '#28c7ef');
+  fillPixels(context, 13, 4, 2, 3, '#7ee6ff');
+}
+
 export function buildTextures(scene) {
   for (let variant = 0; variant < 4; variant += 1) {
     makeTexture(scene, `grass-${variant}`, 16, 16, (context) =>
@@ -424,7 +532,15 @@ export function buildTextures(scene) {
     makeTexture(scene, `coin-${frame}`, 16, 16, (context) =>
       paintCoin(context, frame),
     );
+    makeTexture(scene, `gem-${frame}`, 16, 16, (context) =>
+      paintGem(context, frame),
+    );
   }
+
+  makeTexture(scene, 'powerup-range', 16, 16, paintRangePowerup);
+  makeTexture(scene, 'powerup-speed', 16, 16, paintSpeedPowerup);
+  makeTexture(scene, 'aura-range', 16, 16, paintRangeAura);
+  makeTexture(scene, 'aura-speed', 16, 16, paintSpeedAura);
 
   for (let frame = 0; frame < 3; frame += 1) {
     makeTexture(scene, `bomb-${frame}`, 16, 16, (context) =>

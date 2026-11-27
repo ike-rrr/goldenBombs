@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  COIN_KINDS,
   DIRECTIONS,
+  LARGE_SPAWN_TILES,
   LOBBY_COUNTDOWN_MS,
+  MAP_SIZES,
   MAX_PLAYERS,
   RESULTS_MS,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
+  SPECIAL_COINS_START,
+  SPECIAL_COINS_START_LARGE,
+  SPECIAL_COIN_VALUE,
 } from '../src/constants.js';
 import { RoomManager } from '../src/rooms.js';
 import { mulberry32 } from '../src/game.js';
@@ -113,12 +119,42 @@ test('only the host can start, and starting broadcasts the authoritative start p
   const emitted = harness.lastEmit('game:start');
   assert.equal(emitted.code, room.code);
   assert.equal(emitted.payload.roundNumber, 1);
-  assert.equal(emitted.payload.map.length, 11);
+  assert.equal(emitted.payload.map.length, MAP_SIZES.small.height);
+  assert.equal(emitted.payload.width, MAP_SIZES.small.width);
+  assert.equal(emitted.payload.height, MAP_SIZES.small.height);
   assert.equal(emitted.payload.state.players.length, 2);
+  const gems = emitted.payload.state.coins.filter(
+    (coin) => coin.kind === COIN_KINDS.SPECIAL,
+  );
+  assert.equal(gems.length, SPECIAL_COINS_START);
+  assert.ok(gems.every((coin) => coin.value === SPECIAL_COIN_VALUE));
+  assert.ok(Array.isArray(emitted.payload.state.powerups));
   assert.ok(emitted.payload.roundDurationMs >= 30_000);
   assert.ok(emitted.payload.roundDurationMs <= 60_000);
 
   assert.equal(harness.manager.start(harness.socket('host')).code, 'NOT_IN_LOBBY');
+});
+
+test('a full six-player room starts on the larger map with all six spawns', () => {
+  const harness = createHarness();
+  const { host } = addFullRoom(harness);
+
+  const result = harness.manager.start(harness.socket('host'));
+  assert.equal(result.ok, true);
+
+  const emitted = harness.lastEmit('game:start');
+  assert.equal(emitted.code, host.code);
+  assert.equal(emitted.payload.width, MAP_SIZES.large.width);
+  assert.equal(emitted.payload.height, MAP_SIZES.large.height);
+  assert.equal(emitted.payload.map.length, MAP_SIZES.large.height);
+  assert.equal(emitted.payload.state.players.length, MAX_PLAYERS);
+  const gems = emitted.payload.state.coins.filter(
+    (coin) => coin.kind === COIN_KINDS.SPECIAL,
+  );
+  assert.equal(gems.length, SPECIAL_COINS_START_LARGE);
+
+  const spawnKeys = new Set(emitted.payload.spawns.map((tile) => `${tile.x},${tile.y}`));
+  assert.deepEqual(spawnKeys, new Set(LARGE_SPAWN_TILES.map((tile) => `${tile.x},${tile.y}`)));
 });
 
 test('the lobby auto-starts when its countdown expires', () => {

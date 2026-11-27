@@ -729,7 +729,11 @@ button {
 
 /* Game */
 #screen-game {
-  max-width: 780px;
+  max-width: 980px;
+}
+
+#screen-game.wide-map {
+  max-width: 980px;
 }
 
 .game-shell {
@@ -738,7 +742,7 @@ button {
 
 .hud {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto auto 1fr;
   align-items: stretch;
   gap: 9px;
   margin-bottom: 10px;
@@ -854,6 +858,75 @@ button {
 .score-value {
   color: var(--gold);
   font-size: 11px;
+}
+
+.score-effects {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.power-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  padding: 1px 2px;
+  border: 1px solid currentColor;
+  font-size: 6px;
+  line-height: 1;
+}
+
+.power-badge[hidden] {
+  display: none;
+}
+
+.power-range {
+  color: #ff8090;
+  background: rgba(229, 35, 63, 0.22);
+}
+
+.power-speed {
+  color: #9cefff;
+  background: rgba(40, 199, 239, 0.22);
+}
+
+.active-effects {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 108px;
+  padding: 5px 7px;
+  background: #101938;
+  border: 3px solid var(--cream);
+  box-shadow:
+    0 0 0 3px var(--ink),
+    5px 5px 0 rgba(0, 0, 0, 0.3);
+}
+
+.effect-chip {
+  padding: 3px 5px;
+  border: 1px solid currentColor;
+  font-size: 6px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.effect-range {
+  color: #ffd0d0;
+  background: #8b0f27;
+}
+
+.effect-speed {
+  color: #d8fbff;
+  background: #0b6e93;
+}
+
+.effect-empty {
+  color: #8994bd;
+  opacity: 0.75;
 }
 
 #canvas-wrap {
@@ -1315,6 +1388,10 @@ kbd {
 @media (max-width: 720px) {
   .hud {
     grid-template-columns: auto 1fr;
+  }
+
+  .active-effects {
+    grid-column: 1 / -1;
   }
 
   .scoreboard {

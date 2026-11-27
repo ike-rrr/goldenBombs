@@ -19,6 +19,21 @@ function getScene() {
   return phaserGame?.scene?.getScene('GameScene') ?? null;
 }
 
+// The board is 48px per tile. Six-player rooms use a 19x15 map, so the canvas
+// and its wrapper grow from 720x528 to 912x720 when the round starts.
+function resizeGame(width = 15, height = 11) {
+  const pixelWidth = width * 48;
+  const pixelHeight = height * 48;
+  phaserGame?.scale?.resize(pixelWidth, pixelHeight);
+
+  const wrap = document.getElementById('canvas-wrap');
+  if (wrap) {
+    wrap.style.maxWidth = `${pixelWidth}px`;
+    wrap.style.aspectRatio = `${width} / ${height}`;
+  }
+  document.getElementById('screen-game')?.classList.toggle('wide-map', width > 15);
+}
+
 function emitAck(eventName, payload, timeoutMs = 7_000) {
   return new Promise((resolve) => {
     if (!socket.connected) {
@@ -164,6 +179,7 @@ socket.on('room:error', (payload) => {
 
 socket.on('game:start', (payload) => {
   inGame = true;
+  resizeGame(payload.width, payload.height);
   const scene = getScene();
 
   if (scene) {

@@ -6,6 +6,11 @@ const TILE_SIZE = 48;
 const WALK_FRAME_MS = 120;
 const MOVE_SEND_MS = 105;
 
+const POWERUP_LABELS = {
+  range: { text: 'RANGE UP', color: '#ff5c6b', texture: 'powerup-range' },
+  speed: { text: 'SPEED UP', color: '#7ee6ff', texture: 'powerup-speed' },
+};
+
 const KEY_DIRECTIONS = {
   ArrowUp: 'up',
   KeyW: 'up',
@@ -30,6 +35,7 @@ export class GameScene extends Phaser.Scene {
       decals: this.add.container(0, 0).setDepth(1),
       walls: this.add.container(0, 0).setDepth(5),
       coins: this.add.container(0, 0).setDepth(8),
+      powerups: this.add.container(0, 0).setDepth(10),
       bombs: this.add.container(0, 0).setDepth(15),
       players: this.add.container(0, 0).setDepth(20),
       flames: this.add.container(0, 0).setDepth(30),
@@ -40,11 +46,15 @@ export class GameScene extends Phaser.Scene {
     this.playerSprites = new Map();
     this.bombSprites = new Map();
     this.coinSprites = new Map();
+    this.powerupSprites = new Map();
     this.flameSprites = new Map();
     this.map = [];
+    this.mapWidth = 15;
+    this.mapHeight = 11;
     this.activeRound = false;
     this.held = new Map();
     this.lastSentAt = 0;
+    this.sendCooldownMs = MOVE_SEND_MS;
     this.onMove = null;
     this.onBomb = null;
     this.onDamage = null;
@@ -112,7 +122,7 @@ export class GameScene extends Phaser.Scene {
   trySendMove(force = false) {
     if (!this.activeRound || this.held.size === 0) return;
     const now = performance.now();
-    if (!force && now - this.lastSentAt < MOVE_SEND_MS) return;
+    if (!force && now - this.lastSentAt < this.sendCooldownMs) return;
 
     let direction = null;
     let latest = -1;
@@ -132,9 +142,14 @@ export class GameScene extends Phaser.Scene {
     this.resetBoard();
     this.localPlayerId = payload.localPlayerId;
     this.map = payload.map.map((row) => [...row]);
+    this.mapWidth = payload.width ?? this.map[0]?.length ?? 15;
+    this.mapHeight = payload.height ?? this.map.length ?? 11;
+    this.cameras.main.setBounds(0, 0, this.mapWidth * TILE_SIZE, this.mapHeight * TILE_SIZE);
+    this.cameras.main.setZoom(1);
     this.activeRound = true;
     this.held.clear();
     this.lastSentAt = 0;
+    this.sendCooldownMs = MOVE_SEND_MS;
 
     this.buildBoard();
     this.applyState({
@@ -157,6 +172,7 @@ export class GameScene extends Phaser.Scene {
     this.playerSprites?.clear();
     this.bombSprites?.clear();
     this.coinSprites?.clear();
+    this.powerupSprites?.clear();
     this.flameSprites?.clear();
     this.map = [];
   }
@@ -218,6 +234,7 @@ export class GameScene extends Phaser.Scene {
     this.syncPlayers(state.players ?? []);
     this.syncBombs(state.bombs ?? []);
     this.syncCoins(state.coins ?? []);
+    this.syncPowerups(state.powerups ?? []);
     this.syncFlames(state.flames ?? []);
     this.syncDestroyed(state.destroyed ?? []);
   }
@@ -233,9 +250,37 @@ export class GameScene extends Phaser.Scene {
         this.cameras.main.shake(130, 0.006);
         if (event.playerId === this.localPlayerId) this.onDamage?.();
       } else if (event.type === 'coin-pickup') {
-        this.spawnBurst(center.x, center.y, 'spark-gold', 6, [0xffd447, 0xfff3b0, 0xff9f1c]);
-        if (event.playerId === this.localPlayerId) {
-          this.spawnFloatingText(center.x, center.y - 10, `+${event.amount}`, '#ffd447');
+        if (event.special > 0) {
+          this.spawnBurst(center.x, center.y, 'spark-white', 12, [
+            0x7ee6ff, 0xb39bff, 0xffffff,
+          ]);
+          if (event.playerId === this.localPlayerId) {
+            this.spawnFloatingText(center.x, center.y - 14, `GEM +${event.amount}`, '#7ee6ff');
+            this.onToast?.(`Special gem! +${event.amount} coins`);
+          }
+        } else {
+          this.spawnBurst(center.x, center.y, 'spark-gold', 6, [
+            0xffd447, 0xfff3b0, 0xff9f1c,
+          ]);
+          if (event.playerId === this.localPlayerId) {
+            this.spawnFloatingText(center.x, center.y - 10, `+${event.amount}`, '#ffd447');
+          }
+        }
+      } else if (event.type === 'powerup-pickup') {
+        const info = POWERUP_LABELS[event.powerupType] ?? POWERUP_LABELS.range;
+        this.spawnBurst(
+          center.x,
+          center.y,
+          event.powerupType === 'speed' ? 'spark-white' : 'spark-gold',
+          10,
+          event.powerupType === 'speed'
+            ? [0x7ee6ff, 0xb9f4ff, 0xffffff]
+            : [0xff4f5f, 0xff7b7b, 0xfff8df],
+        );
+        const label = event.applied ? info.text : 'MAX!';
+        this.spawnFloatingText(center.x, center.y - 14, label, info.color);
+        if (event.playerId === this.localPlayerId && event.applied) {
+          this.onToast?.(`${info.text} — ${event.powerupType === 'range' ? `blast ${event.range}` : 'faster movement'}`);
         }
       } else if (event.type === 'explosion') {
         this.cameras.main.shake(100, 0.004);
@@ -265,6 +310,14 @@ export class GameScene extends Phaser.Scene {
       player.colorIndex = state.colorIndex;
       player.invulnerable = state.invulnerable;
       player.coins = state.coins;
+      player.rangeLevel = state.rangeLevel ?? 0;
+      player.speedLevel = state.speedLevel ?? 0;
+      player.rangeAura.setVisible(player.rangeLevel > 0);
+      player.speedAura.setVisible(player.speedLevel > 0);
+
+      if (state.id === this.localPlayerId && state.moveCooldownMs) {
+        this.sendCooldownMs = Math.max(50, Math.min(MOVE_SEND_MS, state.moveCooldownMs - 10));
+      }
 
       if (player.name !== state.name) {
         player.name = state.name;
@@ -285,6 +338,10 @@ export class GameScene extends Phaser.Scene {
     const palette = playerColor(state.colorIndex);
     const container = this.add.container(center.x, center.y);
     const shadow = this.add.image(0, 12, 'shadow').setScale(3).setAlpha(0.9);
+    const rangeAura = this.add.image(0, 5, 'aura-range').setScale(3).setAlpha(0.55);
+    const speedAura = this.add.image(0, 12, 'aura-speed').setScale(3).setAlpha(0.65);
+    rangeAura.setVisible(false);
+    speedAura.setVisible(false);
     const sprite = this.add.image(0, 0, `player-${state.colorIndex}-down-0`).setScale(3);
     const label = this.add
       .text(0, -27, state.name, {
@@ -299,7 +356,7 @@ export class GameScene extends Phaser.Scene {
     const indicator = this.add.image(0, -45, 'you-arrow').setScale(2);
     indicator.setTint(Phaser.Display.Color.HexStringToColor(palette.light).color);
 
-    container.add([shadow, sprite, label, indicator]);
+    container.add([shadow, rangeAura, speedAura, sprite, label, indicator]);
     this.layers.players.add(container);
 
     return {
@@ -307,6 +364,8 @@ export class GameScene extends Phaser.Scene {
       sprite,
       label,
       indicator,
+      rangeAura,
+      speedAura,
       dir: state.dir,
       name: state.name,
       targetX: center.x,
@@ -315,6 +374,8 @@ export class GameScene extends Phaser.Scene {
       invulnerable: state.invulnerable,
       colorIndex: state.colorIndex,
       coins: state.coins,
+      rangeLevel: state.rangeLevel ?? 0,
+      speedLevel: state.speedLevel ?? 0,
     };
   }
 
@@ -357,23 +418,30 @@ export class GameScene extends Phaser.Scene {
       seen.add(coin.id);
       let entry = this.coinSprites.get(coin.id);
       const center = this.tileCenter(coin.x, coin.y);
+      const kind = coin.kind === 'gem' ? 'gem' : 'coin';
 
       if (!entry) {
-        const sprite = this.add.image(center.x, center.y, 'coin-0').setScale(0);
+        const sprite = this.add.image(center.x, center.y, `${kind}-0`).setScale(0);
         this.layers.coins.add(sprite);
         this.tweens.add({
           targets: sprite,
-          scale: 3,
-          duration: coin.droppedBy ? 280 : 180,
-          ease: coin.droppedBy ? 'Bounce.Out' : 'Back.Out',
+          scale: kind === 'gem' ? 3.2 : 3,
+          duration: kind === 'gem' ? 260 : coin.droppedBy ? 280 : 180,
+          ease: coin.droppedBy || kind === 'gem' ? 'Bounce.Out' : 'Back.Out',
         });
         entry = {
           sprite,
+          kind,
           baseX: center.x,
           baseY: center.y,
           phase: (coin.id % 17) * 0.4,
         };
         this.coinSprites.set(coin.id, entry);
+      }
+
+      if (entry.kind !== kind) {
+        entry.kind = kind;
+        entry.sprite.setTexture(`${kind}-0`);
       }
 
       entry.baseX = center.x;
@@ -385,6 +453,52 @@ export class GameScene extends Phaser.Scene {
       if (seen.has(id)) continue;
       entry.sprite.destroy();
       this.coinSprites.delete(id);
+    }
+  }
+
+  syncPowerups(powerups) {
+    const seen = new Set();
+
+    for (const powerup of powerups) {
+      seen.add(powerup.id);
+      let entry = this.powerupSprites.get(powerup.id);
+      const center = this.tileCenter(powerup.x, powerup.y);
+
+      if (!entry) {
+        const sprite = this.add
+          .image(center.x, center.y, `powerup-${powerup.type}`)
+          .setScale(0);
+        this.layers.powerups.add(sprite);
+        this.tweens.add({
+          targets: sprite,
+          scale: 2.7,
+          duration: 220,
+          ease: 'Back.Out',
+        });
+        entry = {
+          sprite,
+          type: powerup.type,
+          baseX: center.x,
+          baseY: center.y,
+          phase: (powerup.id % 13) * 0.5,
+        };
+        this.powerupSprites.set(powerup.id, entry);
+      }
+
+      if (entry.type !== powerup.type) {
+        entry.type = powerup.type;
+        entry.sprite.setTexture(`powerup-${powerup.type}`);
+      }
+
+      entry.baseX = center.x;
+      entry.baseY = center.y;
+      entry.sprite.setPosition(center.x, center.y);
+    }
+
+    for (const [id, entry] of this.powerupSprites.entries()) {
+      if (seen.has(id)) continue;
+      entry.sprite.destroy();
+      this.powerupSprites.delete(id);
     }
   }
 
@@ -536,6 +650,20 @@ export class GameScene extends Phaser.Scene {
       player.sprite.setAlpha(
         player.invulnerable && Math.floor(this.time.now / 90) % 2 === 0 ? 0.35 : 1,
       );
+
+      if (player.rangeAura.visible) {
+        player.rangeAura.setAlpha(0.42 + Math.sin(this.time.now / 190) * 0.12);
+      }
+      if (player.speedAura.visible) {
+        player.speedAura.setAlpha(0.48 + Math.sin(this.time.now / 110) * 0.18);
+      }
+    }
+
+    for (const [id, powerup] of this.powerupSprites.entries()) {
+      powerup.sprite.x = powerup.baseX;
+      powerup.sprite.y =
+        powerup.baseY + Math.sin(this.time.now / 280 + powerup.phase) * 3;
+      powerup.sprite.setAlpha(0.88 + Math.sin(this.time.now / 170 + powerup.phase) * 0.12);
     }
 
     for (const [id, bomb] of this.bombSprites.entries()) {
@@ -546,11 +674,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     for (const [id, coin] of this.coinSprites.entries()) {
-      const frame = Math.floor(this.time.now / 150 + coin.phase) % 4;
-      const key = `coin-${frame}`;
+      const isGem = coin.kind === 'gem';
+      const frame = Math.floor(this.time.now / (isGem ? 110 : 150) + coin.phase) % 4;
+      const key = `${isGem ? 'gem' : 'coin'}-${frame}`;
       if (coin.sprite.texture.key !== key) coin.sprite.setTexture(key);
       coin.sprite.x = coin.baseX;
-      coin.sprite.y = coin.baseY + Math.sin(this.time.now / 330 + id) * 2;
+      coin.sprite.y =
+        coin.baseY + Math.sin(this.time.now / (isGem ? 240 : 330) + id) * (isGem ? 3 : 2);
     }
 
     for (const [key, flame] of this.flameSprites.entries()) {

@@ -23,13 +23,21 @@ GOLDEN BOMBS - CHANGE LOG
 - Later request: raise the lobby limit to 6, place players in the four corners and
   the top/bottom middle positions, and validate that spawns are not inside blocks
   or squeezed between unbreakable walls.
+- Map size must scale with the player count: keep the current 15x11 board up to 4
+  players, use a larger board for 5-6 players, use the four corners on the small
+  map and corners plus middle spawns on the large map.
+- Add red bomb-range power-ups, movement-speed power-ups, and visual indicators
+  for active effects; document the work in section 9 of this file.
+- Later request: "vale, podrías crear monedas especiales que valgan más? pero que
+  spawneen con menos frecuencia?" (special higher-value coins with rarer spawns).
 - Final instruction: "implement everything" / "keep implementing until it's done".
 
 2. FRAMEWORK / STACK
 --------------------
 - Node.js + Express + Socket.IO authoritative game server (ES modules).
 - Vite + Phaser 4 client (ES modules).
-- 15x11 tile board rendered at 48px per tile from 16x16 procedural textures.
+- Tile board rendered at 48px per tile from 16x16 procedural textures: 15x11 for
+  rooms of up to 4 players and 19x15 for rooms of 5-6 players.
 - Silkscreen pixel font bundled locally (regular + bold, OFL license).
 - Server sends 20 Hz state snapshots; client interpolates positions and plays
   event-driven cosmetic effects.
@@ -40,23 +48,24 @@ GOLDEN BOMBS - CHANGE LOG
 Root:
 - package.json          root scripts (dev, build, start, test, postinstall)
 - README.md             setup, controls, rules, architecture, testing
-- changes.txt           this document
+- changes.txt           this document (changelog + merged creation log)
 - .gitignore            ignores dependencies, build output, logs
 
 Client:
 - client/index.html     menu, lobby, game HUD, results markup
-- client/src/main.js    socket connection, ACK helpers, lifecycle orchestration
+- client/src/main.js    socket connection, ACK helpers, lifecycle orchestration,
+                        dynamic Phaser canvas resizing per map size
 - client/src/ui.js      screen transitions, lobby list, HUD, results, confetti,
                         touch controls, toasts, room-code copy
 - client/src/style.css  full pixel-art theme, animations, responsive layout
-- client/src/game/GameScene.js   Phaser board rendering, player/bomb/coin/flame
+- client/src/game/GameScene.js   Phaser board rendering, player/bomb/coin/power-up/flame
                                  sprites, interpolation, particles, screen shake,
-                                 keyboard input, damage flash hooks
+                                 keyboard input, buff auras, dynamic camera
 - client/src/game/pixelArt.js    procedural textures for grass, stone, brick,
-                                 flowers, pebbles, shadows, players (4 colors x
+                                 flowers, pebbles, shadows, players (6 colors x
                                  3 directions x 2 walk frames), coins, bombs,
                                  flames (center/arm/end x 4 directions x 3 frames),
-                                 arrows, sparks, debris
+                                 arrows, sparks, debris, animated special gems, red range and cyan speed pickups, buff auras
 - client/src/game/palette.js     player color palettes
 - client/src/assets/fonts/*      Silkscreen woff2 + OFL license
 - client/public/favicon.svg      pixel bomb/coin favicon
@@ -67,12 +76,13 @@ Server:
                         production static serving, 50 ms game loop
 - server/src/rooms.js   room codes, joins/leaves, host transfer, lobby countdown,
                         early start, results timing, broadcasts
-- server/src/game.js    map generation, connected-floor validation, spawns, coins,
-                        movement cooldowns, bombs, chain reactions, flames,
-                        wall destruction, damage, invulnerability, results
+- server/src/game.js    map generation for two sizes, connected-floor validation,
+                        spawns, normal coins and special gems, power-ups, movement
+                        cooldowns, bombs, chain reactions, flames, wall destruction,
+                        damage, invulnerability, results
 - server/src/constants.js        all gameplay tuning constants
-- server/test/game.test.js       14 engine tests
-- server/test/rooms.test.js      7 room lifecycle tests
+- server/test/game.test.js       26 engine tests (dynamic maps, spawns, power-ups, gems)
+- server/test/rooms.test.js      8 room lifecycle tests
 
 4. GAMEPLAY CHANGES / IMPLEMENTED FEATURES
 ------------------------------------------
@@ -80,22 +90,37 @@ Server:
   codes are normalized to uppercase, invalid/unknown/full/in-progress joins are rejected.
 - Lobby: live 30-second countdown and progress bar, player list with HOST/YOU badges,
   copy-code button, host-only start button, leave button.
-- Match start: server-generated map and spawn points sent to every client; round banner
-  shows the random duration.
+- Match start: server-generated map, size, and spawn points sent to every client; the
+  client resizes the canvas and the round banner shows the random duration.
 - Rooms accept up to six players; purple and red were added as the fifth and sixth
   player colors so every member is visually distinct.
-- Spawns use six fixed tiles: four inner corners and the middle of the top and bottom
-  edges, shuffled each round. generateMap() opens connecting lanes and
+- Map size scales with the room: 15x11 for up to four players and 19x15 for five or
+  six. The client grows from 720x528 to 912x720 and keeps the tile size at 48px.
+- Spawns depend on the map: the small board uses its four inner corners, while the
+  large board uses four corners plus the middle of the top and bottom edges. They are
+  shuffled each round. generateMap() opens inward escape tiles and connecting lanes;
   validateSpawnTiles() rejects tiles that are blocked or have fewer than two exits
-  that are not indestructible stone; Game rechecks the assigned spawns before play.
+  that are not indestructible stone, and Game rechecks the assigned spawns.
 - Board: border and evenly spaced pillars are stone (indestructible); interior floor
   tiles can contain breakable brick walls.
-- Coins: 12 initial coins, respawn every 2.5 seconds up to 18; pickups award one coin
-  each and emit a floating "+N" indicator for the local player.
-- Movement: tile-based, server-validated, 130 ms cooldown, four directions, held-key
-  repeat, touch D-pad; client interpolates between snapshots.
-- Bombs: one active bomb per player, 2.2 s fuse, blast range 2, 450 ms flames,
-  chain reactions; owners can step off their bomb but cannot walk back onto it.
+- Coins: 12 initial coins on the small map / 18 on the large map, respawning every
+  2.5 seconds up to 18 / 26; pickups award one coin each and emit a floating "+N"
+  indicator for the local player.
+- Special gems: rare coin variants worth five coins each. One starts on the small
+  map and two on the large one, placed away from spawns, coins, and power-ups; they
+  respawn every 15 seconds up to two / three simultaneous gems. Normal dropped coins
+  stay worth one. Pickup events carry `special` and `amount`, snapshots carry
+  `kind`/`value`, and the server performs all scoring and spawning.
+- Movement: tile-based, server-validated, 130 ms cooldown by default, four directions,
+  held-key repeat, touch D-pad; client interpolates between snapshots and sends faster
+  input when a speed boost is active.
+- Bombs: one active bomb per player, 2.2 s fuse, base blast range 2 (up to 5 with
+  range pickups), 450 ms flames, chain reactions; owners can step off their bomb but
+  cannot walk back onto it.
+- Power-ups: red range pickups add one blast tile up to a maximum of five; cyan speed
+  pickups reduce the move cooldown by 20 ms per level down to 70 ms. They start on the
+  map (3/5), respawn every 10 seconds, and cap at 4/6 depending on map size. Buffs are
+  persistent for the round and are included in every state snapshot.
 - Damage: three coins dropped (or fewer if the player has less), one second of
   invulnerability with blinking sprite, red screen flash, camera shake, particles.
 - Disconnects: drop the player's coins, remove their bombs, transfer host to the next
@@ -109,12 +134,18 @@ Server:
 ------------------------
 - Procedural pixel-art textures: animated grass variants, bricks, stone, flowers,
   pebbles, six colored player characters with idle/walk/direction frames, spinning
-  coins, ticking bombs, four-direction animated flame sprites, sparks, debris.
-- Effects: coin pickup sparkles, explosion and hit bursts, floating score text,
-  wall-break debris, camera shake, invulnerability blink.
+  coins, animated cyan/violet faceted gems, ticking bombs, four-direction animated
+  flame sprites, sparks, debris, bright red range pickups, cyan speed pickups, and
+  red/cyan buff auras.
+- Effects: coin pickup sparkles, a larger cyan/violet burst with a "GEM +N" label
+  and toast for special pickups, explosion and hit bursts, floating score text,
+  power-up pickup bursts with "RANGE UP" / "SPEED UP" / "MAX!" labels, wall-break
+  debris, camera shake, invulnerability blink, pulsing buff auras around boosted
+  characters, and bobbing power-up sprites.
 - Vibrant neon pixel UI: title with drop shadows and bobbing animation, paneled menu
-  and lobby, scoreboard chips with leader highlight, urgent timer pulse, result
-  confetti, toasts, responsive layout, coarse-pointer touch controls.
+  and lobby, scoreboard chips with leader highlight and R/S boost badges, a local
+  active-effects HUD, urgent timer pulse, result confetti, toasts, responsive layout
+  that widens for 19x15 maps, coarse-pointer touch controls.
 - Bundled Silkscreen pixel font used throughout the DOM and Phaser labels.
 - A visible "CONTROLS" guide was added to the main menu (WASD / ARROWS to move,
   SPACE / E to bomb), with a touch-specific hint on coarse-pointer devices, and
@@ -142,11 +173,13 @@ Tests:
 
 7. VERIFICATION
 ---------------
-- npm test: 21/21 tests passing (map generation and connectivity, fixed spawns and
-  spawn validation, round duration bounds, damage/invulnerability, coin drops, bombs/walls/chains,
-  bomb re-entry, coin pickup, tie ranking, disconnect cleanup, room codes, join
-  validation and capacity, host-only start, start payload, 30 s auto-start,
-  results-to-lobby flow, host transfer, input gating outside matches).
+- npm test: 34/34 tests passing (small/large map generation, connectivity, corner
+  and middle spawns, spawn validation, round duration bounds, range/speed power-ups
+  and respawn caps, buff fields in snapshots, gem value/spawn rate/caps and state
+  fields, damage/invulnerability, coin drops,
+  bombs/walls/chains, bomb re-entry, coin pickup, tie ranking, disconnect cleanup,
+  room codes, join validation and capacity, host-only start, start payload for both
+  map sizes, 30 s auto-start, results-to-lobby flow, host transfer, input gating).
 - npm run build: succeeds; Vite emits the bundled client into client/dist.
 - Headless Chrome end-to-end run verified: room creation and joining, two-player
   lobby, early start, canvas and board rendering, keyboard movement, bomb placement,
@@ -154,9 +187,15 @@ Tests:
   victory and confetti, automatic lobby return with fresh countdown, host transfer
   after leave, solo start, and room-capacity rejection.
 - A six-socket server check confirmed six players can join and start, a seventh
-  is rejected with ROOM_FULL, and all six fixed spawn tiles are used, unique, on
-  open floor, and identical for every client.
+  is rejected with ROOM_FULL, the start payload uses the 19x15 map, and all six large
+  spawn tiles are used, unique, on open floor, and identical for every client.
   No page errors or console errors were recorded.
+- The new power-up path is covered at engine level: red pickups stop at blast range
+  five, speed pickups reach the 70 ms cooldown, snapshots expose levels for the HUD,
+  and respawn respects the 4/6 caps.
+- A manager-level smoke check confirmed a started room exposes a gem, collecting it
+  awards exactly five coins, and the broadcast `coin-pickup` event carries
+  `special: 1` / `amount: 5`.
 - Server health endpoint returns {"ok":true,"service":"golden-bombs",...}.
 
 8. LIMITATIONS / KNOWN NOTES
@@ -170,3 +209,230 @@ Tests:
   support are not supported.
 - The bundled Silkscreen font is licensed under the SIL Open Font License (see
   client/src/assets/fonts/OFL.txt).
+
+9. REGISTRO DE CREACIÓN (PROMPTS Y TRABAJO REALIZADO)
+------------------------------------------------------
+Contenido fusionado desde el antiguo creacion.txt. Las secciones 1-8 y este
+apartado conviven ahora en un único archivo.
+
+Este apartado resume únicamente los prompts sustantivos recibidos (sin repetir
+mensajes genéricos como "keep implementing please") y el trabajo realizado para
+cada uno.
+
+1. PROMPT: Crear un juego completo multijugador estilo Bomberman llamado Golden Bombs
+   con salas, recolección de monedas, bombas, daño, spawns aleatorios y gráficos
+   pixel-art. También crear un archivo changes.txt que documentara todo.
+
+   QUÉ HICE:
+   - Reconstruí la estructura del repositorio desde cero (cliente, servidor,
+     scripts raíz) porque la carpeta original y el repositorio git ya no estaban.
+   - Elegí una arquitectura con servidor autoritativo Node.js + Socket.IO y
+     cliente Vite + Phaser.
+   - Implementé el motor de juego completo en `server/src/game.js` y la gestión
+     de salas en `server/src/rooms.js`.
+   - Creé el cliente en `client/src/` (main.js, ui.js, style.css, GameScene.js,
+     pixelArt.js, palette.js) con interfaz y sprites pixel-art generados
+     proceduralmente.
+   - Redacté `changes.txt` con prompts, stack, archivos, cambios de jugabilidad
+     y gráficos, instrucciones de ejecución, verificación y limitaciones.
+
+2. PROMPT: Salas multijugador con códigos de 5 caracteres; crear sala y unirse
+   por código; de 2 a 4 jugadores por sala (más tarde ampliado a 6, ver punto 11).
+
+   QUÉ HICE:
+   - Generé códigos únicos de 5 caracteres con un alfabeto sin caracteres
+     ambiguos (`server/src/rooms.js`).
+   - Añadí normalización a mayúsculas, validación de formato, y rechazo de
+     códigos inexistentes, salas llenas, salas ya iniciadas y sockets que ya
+     estaban en otra sala.
+   - Implementé la lista de jugadores en el lobby con insignias HOST/YOU y un
+     botón para copiar el código (`client/src/ui.js`).
+   - El servidor asigna colores únicos y transfiere el rol de anfitrión cuando
+     el host abandona la sala.
+
+3. PROMPT: El host puede iniciar con 1 a 4 jugadores (después 1 a 6; se permite
+   jugar solo) y debe existir una cuenta regresiva automática de 30 segundos en el lobby.
+
+   QUÉ HICE:
+   - `lobby:start` permite al host iniciar anticipadamente; el bucle del servidor
+     inicia automáticamente la partida cuando expira `lobbyEndsAt`.
+   - La interfaz muestra la cuenta regresiva, una barra de progreso y una pista
+     distinta para el host y para los invitados.
+   - Se permite una partida en solitario y el límite de la sala se amplió después
+     a 6 jugadores (punto 11).
+   - Cubrí ambos caminos con pruebas unitarias.
+
+4. PROMPT: Duración aleatoria de 30 a 60 segundos; gana quien tenga más monedas;
+   los empates comparten la victoria; spawns aleatorios en cada partida.
+
+   QUÉ HICE:
+   - `randomRoundDuration()` elige un valor entre 30.000 y 60.000 ms por ronda.
+   - Cada mapa se genera de nuevo y se valida que el área de suelo sea conexa;
+     los puntos de aparición se eligen al azar y separados entre sí (más tarde
+     se sustituyeron por las seis zonas fijas del punto 11).
+   - El cálculo de resultados ordena a los jugadores por monedas y devuelve
+     todos los `winnerIds` cuando hay empate.
+   - La pantalla de resultados muestra "SHARED VICTORY!" cuando corresponde.
+
+5. PROMPT: Monedas repartidas por el mapa que aumentan la puntuación al recogerlas.
+
+   QUÉ HICE:
+   - 12 monedas iniciales, con respawn cada 2,5 segundos hasta un máximo de 18.
+   - El servidor detecta la recolección de forma autoritativa y emite eventos
+     para partículas doradas y un texto flotante "+N" en el cliente.
+   - El HUD muestra las monedas propias y un marcador por jugador con resaltado
+     del líder.
+
+6. PROMPT: Las bombas destruyen paredes destructibles y lastiman a los jugadores;
+   las paredes de borde y los pilares fijos son indestructibles.
+
+   QUÉ HICE:
+   - Bombas con mecha de 2,2 s, alcance 2, reacciones en cadena y un máximo de
+     una bomba activa por jugador; el dueño puede salir pero no volver a entrar.
+   - Las llamas destruyen ladrillos, se detienen en piedra, duran 450 ms y
+     cambian de textura según dirección y extremo del alcance.
+   - El generador de mapas coloca siempre piedra en el borde y en las columnas
+     pares, y ladrillos de forma aleatoria en el resto.
+
+7. PROMPT: Al recibir daño se pierden 3 monedas (o todas si se tienen menos) y se
+   obtiene 1 segundo de invulnerabilidad.
+
+   QUÉ HICE:
+   - `damagePlayer()` descuenta hasta 3 monedas, las suelta en tiles cercanos
+     como nuevas monedas recuperables y fija `invulnerableUntil`.
+   - El cliente reproduce destello rojo, sacudida de cámara, partículas y
+     parpadeo del sprite mientras dura la invulnerabilidad.
+
+8. PROMPT: Gráficos pixel-art coloridos, animaciones, fuente pixelada e interfaz
+   vibrante.
+
+   QUÉ HICE:
+   - Generé todas las texturas desde matrices de píxeles en `pixelArt.js`:
+     césped, piedra, ladrillo, flores, personajes de 6 colores con 3 direcciones
+     y 2 frames de caminata, monedas giratorias, bombas con chispa, llamas
+     animadas en 4 direcciones, flecha "YOU", chispas y escombros.
+   - Añadí interpolación de movimiento, animaciones de entidades, partículas,
+     texto flotante, confeti, toasts y efectos de pantalla.
+   - Integré la fuente Silkscreen (regular y bold, licencia OFL incluida) en
+     toda la interfaz y en las etiquetas de Phaser.
+   - Diseñé una UI responsive con tema neón pixelado, controles táctiles en
+     dispositivos de puntero grueso y pantallas de menú, lobby, partida y
+     resultados.
+
+9. PROMPT: Instrucciones de ejecución, verificación y documentación en changes.txt.
+
+   QUÉ HICE:
+   - Escribí `README.md` y `changes.txt` con instalación, ejecución en
+     desarrollo y producción, controles, reglas, estructura, pruebas y
+     limitaciones.
+   - Añadí `npm test` (21 pruebas, todas pasan) y `npm run build` (correcto).
+   - Verifiqué en Chrome headless el flujo completo de dos jugadores: sala,
+     inicio, renderizado, movimiento, bomba, llamas, daño, resultados, vuelta
+     automática al lobby, transferencia de host, partida en solitario y control
+     de capacidad, sin errores de página ni de consola.
+   - Comprobé que el servidor de producción sirve el cliente compilado y que
+     `/health` responde correctamente.
+
+10. PROMPT: Mostrar los controles en el menú o al comenzar la partida, y añadir
+    ese cambio a este registro.
+
+    QUÉ HICE:
+    - Añadí un bloque "CONTROLS" visible en el menú principal (`client/index.html`)
+      con las teclas WASD / ARROWS para moverse y SPACE / E para colocar bombas,
+      con estilo pixelado en `client/src/style.css`.
+    - En pantallas táctiles ese bloque muestra en su lugar el aviso de usar el
+      D-pad y el botón BOMB que aparecen durante la partida.
+    - El banner de inicio de ronda ("COIN RUSH") también incluye una línea con
+      los controles durante unos segundos al empezar el match.
+    - Documenté el cambio en este archivo y volví a ejecutar
+      `npm run build` para verificarlo.
+
+11. PROMPT: Subir el límite del lobby a 6 jugadores; colocar 4 en las esquinas y
+    2 en el centro de la fila superior e inferior del mapa; crear una comprobación
+    para no aparecer dentro de un bloque ni entre bloques que no se puedan romper.
+
+    QUÉ HICE:
+    - Cambié `MAX_PLAYERS` a 6 en `server/src/constants.js`. La sala admite ahora
+      hasta 6 jugadores, el contador del lobby muestra "x / 6" y se añadieron los
+      colores púrpura y rojo para que los 6 participantes se distingan.
+    - Definí `SPAWN_TILES` con las seis posiciones fijas: (1,1), (13,1), (1,9),
+      (13,9) para las esquinas interiores y (7,1), (7,9) para el centro superior
+      e inferior. Cada ronda baraja qué jugador ocupa cada posición.
+    - Añadí `isSafeSpawnTile()` y `validateSpawnTiles()` en `server/src/game.js`:
+      una posición es válida solo si es suelo libre y tiene al menos dos salidas
+      que no sean piedra indestructible (los ladrillos sí cuentan porque se pueden
+      destruir). El constructor de `Game` vuelve a validar los spawns asignados.
+    - `generateMap()` despeja las zonas de spawn, sus salidas y tres corredores
+      (filas 1 y 9, columna central) para garantizar que las seis zonas pertenezcan
+      a una única área conectada; cualquier mapa que falle la validación se descarta.
+    - Añadí pruebas para los seis spawns, la validación de bloques/bolsillos y el
+      rechazo del séptimo jugador. `npm test` pasa 21/21 y una comprobación con
+      6 sockets reales confirmó los seis spawn tiles, únicos y sobre suelo libre.
+    - Actualicé `README.md` y `changes.txt` con estos cambios.
+
+12. PROMPT: "podrías hacer que según la cantidad de jugadores sea más grande el mapa? hasta 4 el mapa que hay ahora, pero cuando sean 6 se haga más grande, también cambia los spawns del mapa de 4 para que sean en cada esquina y en el mapa de 6 si q sean las 4 esquinas y en medio, también quiero que crees power ups que hagan las bombas con más rango y que sean rojas y que el personaje se mueva más rápido y algún indicador visual de el efecto, también recuerda agregar los cambios a creación.txt"
+
+    QUÉ HICE:
+    - Añadí `MAP_SIZES` en `server/src/constants.js`: las salas de hasta 4 jugadores
+      mantienen el tablero original de 15x11 y las de 5 o 6 usan uno ampliado de
+      19x15. `getMapSize()` elige el tamaño a partir del número de jugadores y
+      `getStartPayload()` envía `width`/`height` reales a todos los clientes.
+    - Separé los spawns en `SMALL_SPAWN_TILES` (cuatro esquinas interiores) y
+      `LARGE_SPAWN_TILES` (cuatro esquinas interiores más el centro de la fila
+      superior e inferior). `assignSpawnTiles()` y `generateMap()` usan el conjunto
+      correspondiente al tamaño y siguen barajando qué jugador ocupa cada zona.
+    - Generalicé `isSafeSpawnTile()`, `validateSpawnTiles()`,
+      `getLargestFloorComponent()` y `generateMap()` para trabajar con cualquier
+      ancho/alto. `getEscapeTiles()` despeja una salida hacia el interior en cada
+      spawn, y los corredores conectan todas las zonas antes de validar el mapa.
+    - Añadí dos power-ups autoritativos en el servidor: el rojo de rango aumenta
+      el alcance de las bombas de 2 a 5, y el de velocidad baja el cooldown de
+      movimiento de 130 ms a 70 ms en tres niveles. Aparecen al inicio (3/5 según
+      el mapa), respawnean cada 10 segundos y tienen un máximo de 4/6.
+    - El estado de cada jugador ahora incluye `range`, `rangeLevel`, `speedLevel`
+      y `moveCooldownMs`; el array `powerups` se sincroniza en cada snapshot y el
+      evento `powerup-pickup` dispara partículas y texto flotante ("RANGE UP",
+      "SPEED UP" o "MAX!").
+    - En el cliente, `main.js` redimensiona el canvas de 720x528 a 912x720 y ajusta
+      el aspecto del contenedor cuando entran 5 o 6 jugadores; `GameScene.js`
+      actualiza los límites de cámara y renderiza los pickups con animación.
+    - `pixelArt.js` genera texturas procedurales para el pickup rojo de rango, el
+      pickup cian de velocidad y dos auras persistentes que se muestran alrededor
+      del personaje mientras el efecto esté activo.
+    - `ui.js` añade insignias R/S en el marcador y un HUD local con "RANGE n ·
+      BLAST n" y "SPEED n · Xms"; `index.html` y `style.css` incluyen el nuevo bloque
+      y la adaptación visual para mapas anchos.
+    - Actualicé `server/test/game.test.js` y `server/test/rooms.test.js` con mapas
+      pequeños/grandes, spawns por cantidad de jugadores, límites de rango y
+      velocidad, respawn de power-ups y tamaño del payload inicial. `npm test`
+      pasa 30/30 y `npm run build` compila correctamente.
+    - Documenté todo en `README.md` y `changes.txt`, y añadí este punto a
+      este registro como se pidió.
+
+13. PROMPT: "vale, podrías crear monedas especiales que valgan más? pero que
+    spawneen con menos frecuencia?"
+
+    QUÉ HICE:
+    - Añadí gemas especiales en `server/src/constants.js` (`COIN_KINDS`,
+      `SPECIAL_COIN_VALUE`, cantidades iniciales/máximas y
+      `SPECIAL_COIN_RESPAWN_MS`). Cada gema vale 5 monedas normales.
+    - `server/src/game.js` genera 1 gema al inicio en mapas pequeños y 2 en los
+      grandes, evitando spawns, monedas y power-ups; las reposiciona cada 15 s
+      hasta un máximo de 2/3 simultáneas. El respawn de monedas normales cuenta
+      solo monedas normales, así que las gemas no ocupan su cupo.
+    - `pickupCoins()` suma `value` en vez de contar monedas y emite
+      `coin-pickup` con `amount`, `coinCount` y `special`. El drops de daño sigue
+      siendo de monedas normales de valor 1, y `getState()` expone `kind`/`value`
+      para que el cliente sepa qué dibujar.
+    - `pixelArt.js` crea cuatro frames procedurales de gema (diamante cian/violeta
+      con facetas y brillo animado). `GameScene.js` usa esos frames para las
+      gemas, las anima más rápido, y muestra una explosión cian/violeta, el texto
+      flotante "GEM +N" y un toast al recogerlas.
+    - Añadí 4 pruebas de motor: valor y evento de la gema, gemas iniciales sin
+      solapamientos, respawn más lento con topes y campos `kind`/`value` en el
+      estado. `npm test` pasa 34/34 y `npm run build` compila correctamente.
+    - Una comprobación de sala simulada confirmó que la partida expone una gema,
+      recogerla suma exactamente 5 monedas y el evento `coin-pickup` emitido
+      incluye `special: 1` y `amount: 5`.
+    - Actualicé `README.md` y `changes.txt` con las reglas, los efectos y la
+      verificación de las gemas.

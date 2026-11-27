@@ -44,6 +44,8 @@ export class GameUI {
 
     this.myCoins = element('my-coins');
     this.roundTimer = element('round-timer');
+    this.activeEffects = element('active-effects');
+    this.effectSignature = null;
     this.scoreboard = element('scoreboard');
     this.roundBanner = element('round-banner');
     this.roundBannerTitle = element('round-banner-title');
@@ -188,6 +190,8 @@ export class GameUI {
     this.confetti.replaceChildren();
     this.scoreElements.clear();
     this.scoreboard.replaceChildren();
+    this.effectSignature = null;
+    this.activeEffects?.replaceChildren();
   }
 
   showLobby(room, myId) {
@@ -257,6 +261,14 @@ export class GameUI {
     return badge;
   }
 
+  makeEffectBadge(type) {
+    const badge = document.createElement('span');
+    badge.className = `power-badge power-${type}`;
+    badge.title = type === 'range' ? 'Bomb range' : 'Movement speed';
+    badge.hidden = true;
+    return badge;
+  }
+
   startLobbyTicker() {
     this.lobbyInterval = window.setInterval(() => this.updateLobbyClock(), 100);
   }
@@ -322,13 +334,19 @@ export class GameUI {
       name.className = 'score-name';
       name.textContent = player.name;
 
+      const effects = document.createElement('span');
+      effects.className = 'score-effects';
+      const rangeBadge = this.makeEffectBadge('range');
+      const speedBadge = this.makeEffectBadge('speed');
+      effects.append(rangeBadge, speedBadge);
+
       const score = document.createElement('strong');
       score.className = 'score-value';
       score.textContent = `${player.coins}`;
 
-      chip.append(avatar, name, score);
+      chip.append(avatar, name, effects, score);
       this.scoreboard.append(chip);
-      this.scoreElements.set(player.id, { chip, score });
+      this.scoreElements.set(player.id, { chip, score, rangeBadge, speedBadge });
     }
   }
 
@@ -338,6 +356,7 @@ export class GameUI {
 
     this.roundTimer.textContent = formatTime(state.timeLeftMs);
     this.roundTimer.classList.toggle('urgent', state.timeLeftMs <= 10_000);
+    this.updateActiveEffects(me);
 
     const topCoins = Math.max(...state.players.map((player) => player.coins), 0);
 
@@ -350,6 +369,13 @@ export class GameUI {
       if (entry.score.textContent !== String(player.coins)) {
         entry.score.textContent = String(player.coins);
       }
+
+      const rangeLevel = player.rangeLevel ?? 0;
+      const speedLevel = player.speedLevel ?? 0;
+      entry.rangeBadge.hidden = rangeLevel === 0;
+      entry.speedBadge.hidden = speedLevel === 0;
+      if (rangeLevel > 0) entry.rangeBadge.textContent = `R${rangeLevel}`;
+      if (speedLevel > 0) entry.speedBadge.textContent = `S${speedLevel}`;
       entry.chip.classList.toggle('leader', topCoins > 0 && player.coins === topCoins);
     }
 
@@ -358,6 +384,44 @@ export class GameUI {
         entry.chip.remove();
         this.scoreElements.delete(id);
       }
+    }
+  }
+
+  updateActiveEffects(me) {
+    if (!me || !this.activeEffects) return;
+
+    const effects = [];
+    if ((me.rangeLevel ?? 0) > 0) {
+      effects.push({
+        type: 'range',
+        label: `RANGE ${me.rangeLevel} · BLAST ${me.range}`,
+      });
+    }
+    if ((me.speedLevel ?? 0) > 0) {
+      effects.push({
+        type: 'speed',
+        label: `SPEED ${me.speedLevel} · ${me.moveCooldownMs}ms`,
+      });
+    }
+
+    const signature = effects.map((effect) => effect.label).join('|') || 'none';
+    if (signature === this.effectSignature) return;
+    this.effectSignature = signature;
+    this.activeEffects.replaceChildren();
+
+    if (effects.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'effect-chip effect-empty';
+      empty.textContent = 'NO BOOSTS';
+      this.activeEffects.append(empty);
+      return;
+    }
+
+    for (const effect of effects) {
+      const chip = document.createElement('span');
+      chip.className = `effect-chip effect-${effect.type}`;
+      chip.textContent = effect.label;
+      this.activeEffects.append(chip);
     }
   }
 
